@@ -4,6 +4,7 @@ import requests
 from dotenv import load_dotenv
 import google.generativeai as genai
 import logging
+import json
 
 # تحميل متغيرات البيئة
 load_dotenv()
@@ -12,6 +13,8 @@ app = Flask(__name__)
 # مفاتيح API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+SHOPIFY_STORE_DOMAIN = os.getenv("SHOPIFY_STORE_DOMAIN")
+SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
 
 # التحقق من وجود المفاتيح
 if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN:
@@ -112,6 +115,20 @@ def send_telegram_message(chat_id, text):
             logging.error(f"Telegram send error: {resp.text}")
     except Exception as e:
         logging.error(f"Telegram send error: {e}")
+
+def get_shopify_products():
+    url = f"https://{SHOPIFY_STORE_DOMAIN}/admin/api/2023-07/products.json"
+    headers = {
+        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+        "Content-Type": "application/json"
+    }
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json().get("products", [])
+    except Exception as e:
+        logging.error(f"Shopify API error: {e}")
+        return []
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
