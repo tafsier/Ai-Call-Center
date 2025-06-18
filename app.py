@@ -61,7 +61,7 @@ PRODUCT_KEYWORDS = {
     "NANO MOUNT PRO CAR HOLDER CH-30": "قاعده سيارة, قاعده مغناطيس, قاعده",
     "NUVOLA SILICON CASE": "كفر, كفر جوال, كفر جوال ايفون, كفر سليكون",
     "Offroad Watch Band WB-340": "سير ساعة ابل, سير حديد, سير قماش, سير خلق",
-    "Orbit Ring stand": "مسكه, رنغ, رنج, خاتm, حلقة",
+    "Orbit Ring stand": "مسكه, رنغ, رنج, خاتم, حلقة",
     "PURE EDGE CLEAR 3D": "لزقه حمايه, لزقة حماية, لزقه شفاف, الفل",
     "PURE EDGE PRIVACY 3D": "لزقه حمايه, لزقة حماية, لزقه, برافسي, ملاقيف, كامل اطراف",
     "PURE MAG CASE": "كفر, كفر جوال, كفر جوال ايفون, بلاستيك ايسي, ما يصفر, ما يتغير لونه, شفاف",
@@ -250,8 +250,10 @@ def add_shopify_links(response_text):
 def find_product_url(product_name):
     """البحث عن منتج في Shopify وإرجاع رابط المنتج"""
     try:
-        # تحديث ذاكرة التخزين المؤقت إذا لزم الأمر
-        refresh_shopify_cache()
+        # التحقق من وجود بيانات التخزين المؤقت
+        if not shopify_products_cache:
+            logging.warning("Shopify products cache is empty")
+            return None
         
         # البحث في ذاكرة التخزين المؤقت
         for product in shopify_products_cache:
@@ -259,7 +261,6 @@ def find_product_url(product_name):
             if product_name.lower() in product["title"].lower():
                 return f"https://{SHOPIFY_STORE_DOMAIN}/products/{product['handle']}"
         
-        # إذا لم يتم العثور على المنتج
         return None
     
     except Exception as e:
@@ -273,12 +274,19 @@ def refresh_shopify_cache():
     # تحديث فقط إذا انتهت مدة التخزين المؤقت
     if datetime.now() - last_cache_update > CACHE_EXPIRATION:
         try:
+            # التحقق من صحة النطاق
+            if not SHOPIFY_STORE_DOMAIN or '.' not in SHOPIFY_STORE_DOMAIN:
+                logging.error(f"Invalid Shopify domain: {SHOPIFY_STORE_DOMAIN}")
+                return
+            
             url = f"https://{SHOPIFY_STORE_DOMAIN}/admin/api/2023-07/products.json"
             headers = {
                 "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
                 "Content-Type": "application/json"
             }
-            response = requests.get(url, headers=headers)
+            
+            # إضافة مهلة للاتصال (10 ثواني)
+            response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             
             # تحديث ذاكرة التخزين المؤقت
@@ -286,6 +294,8 @@ def refresh_shopify_cache():
             last_cache_update = datetime.now()
             logging.info(f"Shopify products cache updated. {len(shopify_products_cache)} products loaded.")
         
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Shopify connection error: {e}")
         except Exception as e:
             logging.error(f"Shopify cache update error: {e}")
 
