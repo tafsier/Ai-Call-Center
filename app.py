@@ -39,6 +39,10 @@ def telegram_webhook():
 
     return jsonify({"status": "ok"}), 200
 
+@app.route("/", methods=["GET"])
+def index():
+    return "Service is running!", 200
+
 def extract_image_url(message_data):
     # معالجة الصور المرفوعة مباشرة
     if 'photo' in message_data:
