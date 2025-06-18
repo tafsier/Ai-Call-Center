@@ -4,7 +4,7 @@ import requests
 from dotenv import load_dotenv
 import google.generativeai as genai
 
-# تحميل المتغيرات من .env
+# تحميل متغيرات البيئة
 load_dotenv()
 app = Flask(__name__)
 
@@ -12,7 +12,7 @@ app = Flask(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# تكوين Gemini
+# تهيئة Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-pro")
 
@@ -20,19 +20,19 @@ model = genai.GenerativeModel("gemini-pro")
 def telegram_webhook():
     data = request.get_json()
 
-    # التأكد من وجود رسالة
+    # تأكد من وجود رسالة
     if "message" not in data:
         return jsonify({"status": "no message"}), 200
 
     message_data = data["message"]
     chat_id = message_data["chat"]["id"]
     text = message_data.get("text", "")
-    image_url = extract_image_url(message_data)  # ممكن تطويره لاحقًا
+    image_url = extract_image_url(message_data)  # للتطوير لاحقًا
 
     # تحليل الرسالة عبر Gemini
     response_text = analyze_message_with_gemini(text, image_url)
 
-    # الرد عبر تيليجرام
+    # إرسال الرد عبر Telegram
     send_telegram_message(chat_id, response_text)
 
     return jsonify({"status": "ok"}), 200
@@ -66,10 +66,10 @@ def send_telegram_message(chat_id, text):
 
 
 def extract_image_url(message_data):
-    # حالياً لا يوجد دعم مباشر من Telegram لإرسال رابط الصورة في webhook
-    # نتركها فارغة ونطورها لاحقًا عند استقبال الصور
+    # حالياً لا يوجد دعم مباشر من Telegram لإرسال رابط صورة ضمن Webhook
+    # سيتم التطوير لاحقًا لدعم الصور فعليًا
     return None
 
 
 if __name__ == "__main__":
-   app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
