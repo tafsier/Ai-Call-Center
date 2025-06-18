@@ -103,6 +103,7 @@ last_cache_update = datetime.min
 
 @app.route("/webhook", methods=["POST"])
 def telegram_webhook():
+    refresh_shopify_cache()  # تحديث كاش المنتجات
     data = request.get_json()
     
     if "message" not in data:
@@ -248,6 +249,24 @@ def add_shopify_links(response_text):
     return response_text
 
 def find_product_url(product_name):
+    """البحث عن منتج في Shopify وإرجاع رابط المنتج"""
+    try:
+        if not shopify_products_cache:
+            logging.warning("Shopify cache is empty, generating fallback link")
+            fallback_handle = product_name.replace(" ", "-").lower()
+            return f"https://{SHOPIFY_STORE_DOMAIN}/products/{fallback_handle}"
+
+        for product in shopify_products_cache:
+            if product_name.lower() in product["title"].lower():
+                return f"https://{SHOPIFY_STORE_DOMAIN}/products/{product['handle']}"
+
+        fallback_handle = product_name.replace(" ", "-").lower()
+        return f"https://{SHOPIFY_STORE_DOMAIN}/products/{fallback_handle}"
+
+    except Exception as e:
+        logging.error(f"Product search error: {e}")
+        return None
+
     """البحث عن منتج في Shopify وإرجاع رابط المنتج"""
     try:
         # التحقق من وجود بيانات التخزين المؤقت
