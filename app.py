@@ -4,7 +4,6 @@ import requests
 from dotenv import load_dotenv
 import google.generativeai as genai
 import logging
-import traceback
 
 # تحميل متغيرات البيئة
 load_dotenv()
@@ -20,7 +19,7 @@ if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN:
 
 # تهيئة Gemini
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-pro-vision")  # نموذج يدعم الصور
+model = genai.GenerativeModel("gemini-1.5-flash")  # نموذج حديث يدعم الصور
 
 @app.route("/webhook", methods=["POST"])
 def telegram_webhook():
@@ -49,14 +48,12 @@ def extract_image_url(message_data):
         photo_array = message_data['photo']
         file_id = photo_array[-1]['file_id']  # أعلى دقة
         return get_telegram_file_url(file_id)
-    
     # معالجة الصور المرسلة كملف
     elif 'document' in message_data:
         doc = message_data['document']
         mime_type = doc.get('mime_type', '')
         if mime_type.startswith('image/'):
             return get_telegram_file_url(doc['file_id'])
-    
     return None
 
 def get_telegram_file_url(file_id):
@@ -72,42 +69,47 @@ def get_telegram_file_url(file_id):
     return None
 
 def analyze_message_with_gemini(message, image_url=None):
-    prompt = f"عميل أرسل: {message}"
-    
+    prompt = f"العميل أرسل: {message}"
     try:
         if image_url:
             # تحميل بيانات الصورة
-            response = requests.get(image_url)
-            response.raise_for_status()
-            image_data = response.content
-            
-            # إرسال الصورة مع النص
-            response = model.generate_content([
-                prompt,
-                {"mime_type": "image/jpeg", "data": image_data}
-            ])
+            img_response = requests.get(image_url)
+            img_response.raise_for_status()
+            image_data = img_response.content
+
+            # إرسال الصورة مع النص إلى Gemini
+            gemini_response = model.generate_content(
+                [
+                    {"text": prompt},
+                    {"mime_type": "image/jpeg", "data": image_data}
+                ]
+            )
         else:
             # إرسال النص فقط
-            response = model.generate_content(prompt)
-            
-        return response.text.strip()
-    
+            gemini_response = model.generate_content(prompt)
+
+        # التأكد من وجود نص في الرد
+        if hasattr(gemini_response, "text"):
+            return gemini_response.text.strip()
+        else:
+            return "لم يتمكن النظام من توليد رد مناسب."
+
     except requests.exceptions.RequestException as e:
         logging.error(f"Image download error: {e}")
-        return "حدث خطأ في معالجة الصورة"
-    
+        return "حدث خطأ في تحميل الصورة أو معالجتها."
     except genai.types.BlockedPromptException:
-        return "عذراً، المحتوى تم رفضه بواسطة نظام الأمان"
-    
+        return "عذراً، المحتوى تم رفضه بواسطة نظام الأمان."
     except Exception as e:
-        logging.error(f"Gemini API Error: {traceback.format_exc()}")
+        logging.error(f"Gemini API Error: {e}")
         return "حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقًا."
 
 def send_telegram_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
     try:
-        requests.post(url, json=payload)
+        resp = requests.post(url, json=payload)
+        if resp.status_code != 200:
+            logging.error(f"Telegram send error: {resp.text}")
     except Exception as e:
         logging.error(f"Telegram send error: {e}")
 
