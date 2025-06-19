@@ -183,7 +183,39 @@ def get_telegram_file_url(file_id):
     except Exception as e:
         logging.error(f"Telegram file error: {e}")
     return None
+import requests
 
+def get_shopify_products():
+    try:
+        url = f"https://{SHOPIFY_STORE_DOMAIN}/admin/api/2023-01/products.json"
+        headers = {
+            "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+            "Content-Type": "application/json"
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+
+        products = []
+        for product in data.get("products", []):
+            products.append({
+                "id": product.get("id"),
+                "title": product.get("title"),
+                "handle": product.get("handle"),
+                "description": product.get("body_html"),
+                "variants": product.get("variants"),
+                "options": product.get("options"),
+                "images": product.get("images"),
+                "vendor": product.get("vendor"),
+                "product_type": product.get("product_type"),
+                "tags": product.get("tags"),
+                "available": any(v.get("available", False) for v in product.get("variants", []))
+            })
+        return products
+
+    except Exception as e:
+        print("Error fetching products from Admin API:", str(e))
+        return []
 def analyze_message_with_gemini(chat_hash, message, image_url=None):
     # استرجاع تاريخ المحادثة (بدون الرسالة الحالية)
     history = conversation_history.get(chat_hash, [])[:-1]
