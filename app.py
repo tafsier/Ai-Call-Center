@@ -201,7 +201,10 @@ def analyze_message_with_gemini(chat_hash, message, image_url=None):
     # تجهيز نص المنتجات المطابقة فقط
     if matched_products:
         shopify_products_text = "\n".join([
-            f"- الاسم: {p['title']}\n  السعر: {p['variants'][0]['price']} ريال\n  الرابط: https://{SHOPIFY_STORE_DOMAIN}/products/{p['handle']}\n  الوصف: {p['body_html']}"
+            f"- [{p['title']}]"
+            f"(https://wizardch.com/products/{p['handle']})\n"
+            f"  السعر: {p['variants'][0]['price']} ريال\n"
+            f"  الوصف: {p['body_html']}"
             for p in matched_products if p.get("variants")
         ])
     else:
