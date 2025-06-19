@@ -191,11 +191,21 @@ def analyze_message_with_gemini(chat_hash, message, image_url=None):
     # جلب المنتجات من المتجر
     products = get_shopify_products()
 
-    # تجهيز نص المنتجات من المتجر (اسم - وصف - رابط)
-    shopify_products_text = "\n".join([
-        f"- الاسم: {p['title']}\n  الرابط: https://{SHOPIFY_STORE_DOMAIN}/products/{p['handle']}\n  الوصف: {p['body_html']}"
-        for p in products
-    ])
+    # فلترة المنتجات حسب الكلمات المفتاحية في الرسالة
+    matched_products = []
+    for p in products:
+        keywords = PRODUCT_KEYWORDS.get(p["title"], "")
+        if any(word.strip() in message for word in keywords.split(",")):
+            matched_products.append(p)
+
+    # تجهيز نص المنتجات المطابقة فقط
+    if matched_products:
+        shopify_products_text = "\n".join([
+            f"- الاسم: {p['title']}\n  السعر: {p['variants'][0]['price']} ريال\n  الرابط: https://{SHOPIFY_STORE_DOMAIN}/products/{p['handle']}\n  الوصف: {p['body_html']}"
+            for p in matched_products if p.get("variants")
+        ])
+    else:
+        shopify_products_text = "لا يوجد منتجات مطابقة للطلب حالياً."
 
     # بناء البرومبت
     prompt = f"""{SYSTEM_INSTRUCTIONS}
