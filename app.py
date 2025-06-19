@@ -221,7 +221,7 @@ def analyze_message_with_gemini(chat_hash, message, image_url=None):
                     break
             
             # بناء رابط المنتج باستخدام النطاق الديناميكي
-            product_url = f"https://{SHOPIFY_STORE_DOMAIN}/products/{p['handle']}"
+            product_url = f"https://wizardch.com/products/{p['handle']}"
             
             # إضافة المنتج للنص
             shopify_products_text += f"- الاسم: {p['title']}\n"
