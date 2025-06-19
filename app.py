@@ -179,8 +179,8 @@ def get_telegram_file_url(file_id):
     return None
 
 def analyze_message_with_gemini(chat_hash, message, image_url=None):
-    # استرجاع تاريخ المحادثة (بدون الرسالة الحالية)
-    history = conversation_history.get(chat_hash, [])[:-1]
+    # استرجاع آخر 5 رسائل من تاريخ المحادثة (بدون الرسالة الحالية)
+    history = conversation_history.get(chat_hash, [])[:-1][-5:]
 
     # جلب المنتجات من المتجر
     products = get_shopify_products()
