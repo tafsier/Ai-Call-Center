@@ -185,34 +185,48 @@ def get_telegram_file_url(file_id):
     return None
 
 def analyze_message_with_gemini(chat_hash, message, image_url=None):
-    # استرجاع تاريخ المحادثة (دون الرسالة الحالية)
+    # استرجاع تاريخ المحادثة (بدون الرسالة الحالية)
     history = conversation_history.get(chat_hash, [])[:-1]
-    
-    # بناء البرومبت مع التاريخ
-    prompt = f"{SYSTEM_INSTRUCTIONS}\n\n"
-    
-    # إضافة المحادثة السابقة
+
+    # جلب المنتجات من المتجر
+    products = get_shopify_products()
+
+    # تجهيز نص المنتجات من المتجر (اسم - وصف - رابط)
+    shopify_products_text = "\n".join([
+        f"- الاسم: {p['title']}\n  الرابط: https://{SHOPIFY_STORE_DOMAIN}/products/{p['handle']}\n  الوصف: {p['body_html']}"
+        for p in products
+    ])
+
+    # بناء البرومبت
+    prompt = f"""{SYSTEM_INSTRUCTIONS}
+
+سجل المحادثة:
+"""
     for msg in history:
         role = "العميل" if msg["role"] == "user" else "المساعد"
         content = msg['text']
         if msg.get('image'):
             content += " [صورة]"
-        prompt += f"{role}: {content}\n\n"
-    
-    # إضافة الكلمات المفتاحية
-    prompt += f"\nالكلمات المفتاحية للمنتجات:\n{json.dumps(PRODUCT_KEYWORDS, indent=2, ensure_ascii=False)}\n\n"
-    
-    # إضافة الرسالة الحالية
-    prompt += f"العميل أرسل:\n{message}\n\n"
-    
+        prompt += f"{role}: {content}\n"
+
+    prompt += f"""
+
+الكلمات المفتاحية للمنتجات:
+{json.dumps(PRODUCT_KEYWORDS, indent=2, ensure_ascii=False)}
+
+قائمة المنتجات من المتجر (اختر منها فقط المناسب للطلب):
+{shopify_products_text}
+
+رسالة العميل الحالية:
+{message}
+"""
+
     try:
         if image_url:
-            # تحميل بيانات الصورة
             img_response = requests.get(image_url)
             img_response.raise_for_status()
             image_data = img_response.content
 
-            # إرسال الصورة مع النص إلى Gemini
             gemini_response = model.generate_content(
                 [
                     {"text": prompt},
@@ -220,14 +234,21 @@ def analyze_message_with_gemini(chat_hash, message, image_url=None):
                 ]
             )
         else:
-            # إرسال النص فقط
             gemini_response = model.generate_content(prompt)
 
-        # التأكد من وجود نص في الرد
         if hasattr(gemini_response, "text"):
             return gemini_response.text.strip()
         else:
             return "لم يتمكن النظام من توليد رد مناسب."
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Image download error: {e}")
+        return "حدث خطأ في تحميل الصورة أو معالجتها."
+    except genai.types.BlockedPromptException:
+        return "عذراً، المحتوى تم رفضه بواسطة نظام الأمان."
+    except Exception as e:
+        logging.error(f"Gemini API Error: {e}")
+        return "حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقًا."
+
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Image download error: {e}")
