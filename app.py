@@ -23,7 +23,7 @@ if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN:
 
 # تهيئة Gemini
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")  # نموذج حديث يدعم الصور
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 # تعليمات النظام المعدلة
 SYSTEM_INSTRUCTIONS = """
@@ -183,70 +183,59 @@ def get_telegram_file_url(file_id):
     except Exception as e:
         logging.error(f"Telegram file error: {e}")
     return None
-import requests
 
 def get_shopify_products():
+    url = f"https://{SHOPIFY_STORE_DOMAIN}/admin/api/2023-07/products.json"
+    headers = {
+        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+        "Content-Type": "application/json"
+    }
     try:
-        url = f"https://{SHOPIFY_STORE_DOMAIN}/admin/api/2023-01/products.json"
-        headers = {
-            "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-            "Content-Type": "application/json"
-        }
         response = requests.get(url, headers=headers)
         response.raise_for_status()
-        data = response.json()
-
-        products = []
-        for product in data.get("products", []):
-            products.append({
-                "id": product.get("id"),
-                "title": product.get("title"),
-                "handle": product.get("handle"),
-                "description": product.get("body_html"),
-                "variants": product.get("variants"),
-                "options": product.get("options"),
-                "images": product.get("images"),
-                "vendor": product.get("vendor"),
-                "product_type": product.get("product_type"),
-                "tags": product.get("tags"),
-                "available": any(v.get("available", False) for v in product.get("variants", []))
-            })
-        return products
-
+        return response.json().get("products", [])
     except Exception as e:
-        print("Error fetching products from Admin API:", str(e))
+        logging.error(f"Shopify API error: {e}")
         return []
+
 def analyze_message_with_gemini(chat_hash, message, image_url=None):
     # استرجاع تاريخ المحادثة (بدون الرسالة الحالية)
     history = conversation_history.get(chat_hash, [])[:-1]
 
     # جلب المنتجات من المتجر
     products = get_shopify_products()
-
-    # فلترة المنتجات حسب الكلمات المفتاحية في الرسالة
-    matched_products = []
+    
+    # بناء نص المنتجات بشكل صحيح
+    shopify_products_text = ""
     for p in products:
-        keywords = PRODUCT_KEYWORDS.get(p["title"], "")
-        if any(word.strip() in message for word in keywords.split(",")):
-            matched_products.append(p)
-
-    # تجهيز نص المنتجات المطابقة فقط
-    if matched_products:
-        shopify_products_text = "\n".join([
-            f"- [{p['title']}]"
-            f"(https://wizardch.com/products/{p['handle']})\n"
-            f"  السعر: {p['variants'][0]['price']} ريال\n"
-            f"  الوصف: {p['body_html']}"
-            for p in matched_products if p.get("variants")
-        ])
-    else:
-        shopify_products_text = "لا يوجد منتجات مطابقة للطلب حالياً."
+        # التحقق من وجود المتغيرات
+        if p.get("variants"):
+            # استخراج السعر
+            price = p["variants"][0]["price"]
+            
+            # استخراج الألوان المتوفرة إن وجدت
+            colors = ""
+            for option in p.get("options", []):
+                if option["name"].lower() in ["color", "لون"]:
+                    colors = ", ".join(option["values"])
+                    break
+            
+            # بناء رابط المنتج باستخدام النطاق الديناميكي
+            product_url = f"https://{SHOPIFY_STORE_DOMAIN}/products/{p['handle']}"
+            
+            # إضافة المنتج للنص
+            shopify_products_text += f"- الاسم: {p['title']}\n"
+            shopify_products_text += f"  السعر: {price} ريال\n"
+            if colors:
+                shopify_products_text += f"  الألوان: {colors}\n"
+            shopify_products_text += f"  الرابط: {product_url}\n\n"
 
     # بناء البرومبت
     prompt = f"""{SYSTEM_INSTRUCTIONS}
 
-سجل المحادثة:
+سجل المحادثة السابقة:
 """
+    
     for msg in history:
         role = "العميل" if msg["role"] == "user" else "المساعد"
         content = msg['text']
@@ -255,11 +244,11 @@ def analyze_message_with_gemini(chat_hash, message, image_url=None):
         prompt += f"{role}: {content}\n"
 
     prompt += f"""
-
+    
 الكلمات المفتاحية للمنتجات:
 {json.dumps(PRODUCT_KEYWORDS, indent=2, ensure_ascii=False)}
 
-قائمة المنتجات من المتجر (اختر منها فقط المناسب للطلب):
+قائمة المنتجات المتاحة في المتجر:
 {shopify_products_text}
 
 رسالة العميل الحالية:
@@ -285,16 +274,7 @@ def analyze_message_with_gemini(chat_hash, message, image_url=None):
             return gemini_response.text.strip()
         else:
             return "لم يتمكن النظام من توليد رد مناسب."
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Image download error: {e}")
-        return "حدث خطأ في تحميل الصورة أو معالجتها."
-    except genai.types.BlockedPromptException:
-        return "عذراً، المحتوى تم رفضه بواسطة نظام الأمان."
-    except Exception as e:
-        logging.error(f"Gemini API Error: {e}")
-        return "حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقًا."
-
-
+            
     except requests.exceptions.RequestException as e:
         logging.error(f"Image download error: {e}")
         return "حدث خطأ في تحميل الصورة أو معالجتها."
@@ -308,8 +288,7 @@ def send_telegram_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
+        "text": text
     }
     try:
         resp = requests.post(url, json=payload)
@@ -317,20 +296,6 @@ def send_telegram_message(chat_id, text):
             logging.error(f"Telegram send error: {resp.text}")
     except Exception as e:
         logging.error(f"Telegram send error: {e}")
-
-def get_shopify_products():
-    url = f"https://{SHOPIFY_STORE_DOMAIN}/admin/api/2023-07/products.json"
-    headers = {
-        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-        "Content-Type": "application/json"
-    }
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json().get("products", [])
-    except Exception as e:
-        logging.error(f"Shopify API error: {e}")
-        return []
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
